@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>SOLARA — Streets of Port Solara</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #10131a; font-family: 'Segoe UI', system-ui, sans-serif; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #f5f1e6; display: none; }
+  .panel { position: absolute; background: rgba(16,19,26,0.82); border: 1px solid rgba(255,255,255,0.14); border-radius: 10px; padding: 10px 14px; }
+  #top-left { top: 14px; left: 14px; min-width: 210px; }
+  #stars { font-size: 22px; letter-spacing: 3px; color: #8a8f98; }
+  #cash { font-size: 20px; font-weight: 700; color: #7ee081; margin-top: 2px; }
+  #health-bar { width: 180px; height: 10px; background: #2a2f3a; border-radius: 5px; margin-top: 6px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: #58b368; }
+  #ammo, #speed { font-size: 13px; color: #cfd3da; margin-top: 4px; }
+  #top-center { top: 14px; left: 50%; transform: translateX(-50%); text-align: center; max-width: 520px; }
+  #district { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: #ffb03a; }
+  #objective { font-size: 15px; font-weight: 600; margin-top: 2px; }
+  #timer { font-size: 18px; font-weight: 700; color: #ff5fa2; margin-top: 2px; }
+  #toast { position: absolute; top: 96px; left: 50%; transform: translateX(-50%); background: rgba(16,19,26,0.85); border-radius: 8px; padding: 8px 16px; font-size: 15px; transition: opacity 0.4s; max-width: 640px; text-align: center; }
+  #hint { position: absolute; bottom: 14px; left: 14px; font-size: 13px; color: #e8e2d2; background: rgba(16,19,26,0.7); border-radius: 8px; padding: 8px 12px; }
+  #minimap-wrap { position: absolute; right: 14px; bottom: 14px; background: rgba(16,19,26,0.82); border: 1px solid rgba(255,255,255,0.14); border-radius: 10px; padding: 6px; }
+  #minimap { display: block; width: 176px; height: 176px; }
+  #job-btn { pointer-events: auto; position: absolute; right: 14px; top: 14px; background: #ff5fa2; color: #fff; border: none; border-radius: 8px; padding: 10px 16px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  #job-btn:hover { background: #ff7ab0; }
+  .overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(8,10,16,0.72); color: #f5f1e6; z-index: 10; }
+  .card { background: #171b26; border: 1px solid rgba(255,255,255,0.14); border-radius: 14px; padding: 28px 34px; max-width: 620px; text-align: center; }
+  .card h1 { margin: 0 0 4px; font-size: 44px; letter-spacing: 6px; color: #ffb03a; }
+  .card h2 { margin: 0 0 10px; font-size: 26px; color: #ffb03a; }
+  .card p { color: #cfd3da; line-height: 1.5; }
+  .card .tag { color: #ff5fa2; font-weight: 700; letter-spacing: 2px; font-size: 13px; text-transform: uppercase; }
+  .card button { display: block; width: 100%; margin: 10px 0 0; padding: 12px; font-size: 16px; font-weight: 700; border: none; border-radius: 8px; cursor: pointer; background: #ff5fa2; color: #fff; }
+  .card button.secondary { background: #2a2f3a; color: #f5f1e6; }
+  .card button:hover { filter: brightness(1.15); }
+  #job-list { font-size: 14px; color: #e8e2d2; line-height: 1.9; margin: 12px 0; }
+  #save-info { font-size: 14px; color: #7ee081; }
+  .controls { font-size: 13px; color: #9aa0a8; line-height: 1.8; margin-top: 14px; }
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="SOLARA: an open-world crime game in Port Solara"></canvas>
+
+<div id="hud">
+  <div class="panel" id="top-left">
+    <div id="stars">☆☆☆☆☆</div>
+    <div id="cash">$150</div>
+    <div id="health-bar"><div id="health-fill"></div></div>
+    <div id="ammo">Ammo 60</div>
+    <div id="speed">On foot</div>
+  </div>
+  <div class="panel" id="top-center">
+    <div id="district">Downtown</div>
+    <div id="objective">No active job</div>
+    <div id="timer" style="display:none"></div>
+  </div>
+  <div id="toast"></div>
+  <div id="hint"></div>
+  <div id="minimap-wrap"><canvas id="minimap" width="176" height="176"></canvas></div>
+  <button id="job-btn">Take a job</button>
+</div>
+
+<div class="overlay" id="title-screen">
+  <div class="card">
+    <div class="tag">Port Solara &middot; A getaway driver's story</div>
+    <h1>SOLARA</h1>
+    <p>Mara Reyes owes fixer Dario Venn $5,000. Six jobs to clear it — while
+    the Kestrels and the Solara Police Department close in. Steal cars, run
+    jobs, lose the heat, and get out clean.</p>
+    <div id="job-list"></div>
+    <div id="save-info"></div>
+    <button id="continue-btn">Continue</button>
+    <button id="newgame-btn" class="secondary">New game</button>
+    <div class="controls">WASD / arrows — move &amp; drive &middot; Mouse — aim &middot; Click — shoot<br>
+    E — steal a car / use a payphone &middot; Shift — run &middot; Space — handbrake<br>
+    P — pause &middot; M — mute &middot; R — restart the current job</div>
+  </div>
+</div>
+
+<div class="overlay" id="pause-screen">
+  <div class="card">
+    <h2>Paused</h2>
+    <p>Port Solara waits for no one — except right now.</p>
+    <button id="resume-btn">Resume</button>
+    <button id="restart-job-btn" class="secondary">Restart current job</button>
+    <button id="quit-title-btn" class="secondary">Quit to title</button>
+  </div>
+</div>
+
+<div class="overlay" id="busted-screen">
+  <div class="card">
+    <h2>Busted</h2>
+    <p>The SPPD took you in. Bail cost you $150 — and the job is blown.</p>
+    <button id="busted-btn">Back on the street</button>
+  </div>
+</div>
+
+<div class="overlay" id="wasted-screen">
+  <div class="card">
+    <h2>Wasted</h2>
+    <p>Mara wakes up at St. Cielo Hospital, $200 lighter and twice as angry.</p>
+    <button id="wasted-btn">Back on the street</button>
+  </div>
+</div>
+
+<div class="overlay" id="complete-screen">
+  <div class="card">
+    <h2>Debt Cleared</h2>
+    <p>All six jobs done. Dario Venn shakes your hand, and Port Solara is
+    yours — every street, every car, every sunset.</p>
+    <button id="freeroam-btn">Keep playing — free roam</button>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
