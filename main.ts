@@ -1,39 +1,71 @@
-// SOLARA — Streets of Port Solara: a make.fun gta6-01 entry (Node 22,
-// standard library only). The game is this directory's game/ folder, plain
-// static files a desktop browser loads offline (game/index.html and its ES
-// modules, no library and no network request), and the program hands it in.
-// It copies game/ and screenshots/ from beside this file to /output and
-// writes /output/dossier.json, the summary the judge reads, with the
-// vendored make.fun library.
+// Entry program for the SOLARA game in make.fun's GTA 6 bounty.
 //
-// Serve it locally with `node serve.ts`, then open http://localhost:8080.
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+// This program stages the entry for the scorer: it mirrors the playable
+// game directory and the screenshots directory into the grading output
+// directory, then asks the vendored dossier library to summarise that
+// staged copy as dossier.json. The grader reads dossier.json; the game
+// itself is never executed by the scorer.
+//
+// The output directory comes from MAKEFUN_OUTPUT_DIR when that variable
+// is set, and falls back to /output otherwise. Node 22, standard library
+// only, nothing to install.
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { buildDossier } from './vendor/makefun-game.ts';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as url from 'node:url';
+import {
+  buildDossier,
+} from './vendor/makefun-game.ts';
 
-const here = fileURLToPath(new URL('.', import.meta.url));
-const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+// Limits the scorer applies to this bounty, taken from the kit's gate:
+// the dossier's text budget, how many screenshots and how large each may
+// be, and the game tree's entry count, total size and longest path.
+const DOSSIER_TEXT_BYTES = 163840;
+const SHOT_COUNT_MAX = 4;
+const SHOT_BYTES_MAX = 262144;
+const GAME_ENTRY_MAX = 993;
+const GAME_BYTES_MAX = 50331648;
+const GAME_PATH_BYTES_MAX = 1000;
 
-mkdirSync(out, { recursive: true });
-cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
-mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+// Where the staged entry goes: the environment's override, or the
+// grader's /output when nothing overrides it.
+function pickOutputDir() {
+  const override = process.env.MAKEFUN_OUTPUT_DIR;
+  if (override !== undefined && override.length > 0) {
+    return override;
+  }
+  return '/output';
+}
 
-// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes; the others refuse an entry the
-// scorer would refuse (more than 4 screenshots or one over 256 KiB; more than 993 files in game/ or 48 MiB of game
-// files, in all, or a path under game/ over 1000 bytes: game/ counts beside /output's own 1000-entry cap, its
-// screenshots/ and dossier.json).
-writeFileSync(
-  join(out, 'dossier.json'),
-  buildDossier(out, {
-    text_max_bytes: 163840,
-    screenshots: { max: 4, max_bytes: 262144 },
-    game_max_files: 993,
-    game_max_bytes: 50331648,
-    game_path_max_bytes: 1000,
-  }),
-);
+// Copy one folder, contents and all, into a fresh destination.
+function mirrorFolder(fromDir, toDir) {
+  fs.cpSync(fromDir, toDir, { recursive: true });
+}
+
+// The repository root is the folder holding this very file.
+const thisFile = url.fileURLToPath(import.meta.url);
+const repoRoot = path.dirname(thisFile);
+const targetDir = pickOutputDir();
+
+fs.mkdirSync(targetDir, { recursive: true });
+
+mirrorFolder(path.join(repoRoot, 'game'), path.join(targetDir, 'game'));
+
+const shotsSource = path.join(repoRoot, 'screenshots');
+if (fs.existsSync(shotsSource)) {
+  mirrorFolder(shotsSource, path.join(targetDir, 'screenshots'));
+}
+
+const caps = {
+  text_max_bytes: DOSSIER_TEXT_BYTES,
+  screenshots: {
+    max: SHOT_COUNT_MAX,
+    max_bytes: SHOT_BYTES_MAX,
+  },
+  game_max_files: GAME_ENTRY_MAX,
+  game_max_bytes: GAME_BYTES_MAX,
+  game_path_max_bytes: GAME_PATH_BYTES_MAX,
+};
+
+const dossier = buildDossier(targetDir, caps);
+fs.writeFileSync(path.join(targetDir, 'dossier.json'), dossier);
